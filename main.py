@@ -399,53 +399,25 @@ def summarize_articles(client: AzureOpenAI, articles: List[Dict[str, Any]]) -> s
             articles_text += f"   요약: {article['summary']}\n"
             articles_text += f"   링크: {article['link']}\n"
         
-        # Azure OpenAI 프롬프트
-        prompt = f"""다음은 TLDR 뉴스레터에서 추출한 기술 뉴스 기사들입니다 (이미 요약본입니다).
-이 중에서 가장 중요하고 흥미로운 2-3개 기사만 선별하여, 독자가 정말 재미있게 읽을 수 있는 스토리텔링 방식으로 재작성해주세요.
+        # Azure OpenAI 프롬프트 (압축버전)
+        prompt = f"""TLDR 뉴스에서 가장 흥미로운 2-3개 기사만 선별하여 친구에게 말하듯 재미있게 재작성해주세요.
 
 원본 기사들:
 {articles_text}
 
-요구사항:
-1. 총 20개 기사 중 가장 중요하고 흥미로운 **2-3개만** 선별
-2. **스토리텔링 방식**으로 작성 - 마치 친구에게 재미있는 소식을 전하는 것처럼!
-   - 시작: 일상적인 상황이나 질문으로 독자를 끌어들이기
-   - 본문: 구체적인 예시와 비유를 사용하여 설명
-   - 마무리: 실제 영향력과 의미를 강조
-3. **톤 & 스타일**:
-   - 편안하고 친근한 말투 사용
-   - "~데요", "~거예요", "~하네요" 같은 구어체 활용
-   - 감탄사와 이모지 적극 활용 (🎉 🔥 💡 🚀 💰 ⚡ 등)
-   - 매우 사적인 스타일: "~하시나요?", "~줄 아세요?", "~고 있답니다!"
-4. **내용 구성**:
-   - 각 기사마다 2-3개 문단으로 구성
-   - 1문단: 인트로 (독자 관심 유도)
-   - 2문단: 핵심 내용 (구체적 예시와 함께)
-   - 3문단: 영향력과 의미 (무엇이 변하는지)
-5. 기술 용어는 반드시 **일상 예시와 비유**로 설명
-   - 예: "AI 모델 = 사람 뇌를 컴퓨터에 넣은 것"
-   - 예: "GPU = 그림 그리는 고속 버스"
-6. 원본이 광고나 후원 게시물이면 제외
-7. 각 기사는 **최소 250자 이상**으로 충분히 상세하게 작성
+스타일:
+- 친근한 구어체 ("~데요", "~하시나요?", "~고 있답니다!")
+- 이모지 적극 활용 (🎉🔥💡🚀💰⚡)
+- 기술용어는 일상 비유로 설명
+- 각 기사 250자 이상, 2-3문단 구성
 
-중요: 응답은 반드시 다음 형식을 정확히 따라야 합니다. 
+형식 (HTML로 작성):
+<h2>[제목+이모지]</h2>
+<p>[흥미유발 인트로]</p>
+<p>핵심내용 (<strong>숫자/금액</strong> 강조)</p>
+<p><a href="링크">🔗 자세히 보기</a></p>
 
-```html
-<h1>🎯 오늘 챙겨볼 AI 소식 (2-3선)</h1>
-
-<h2>[섹션 1] [눈에 띄는 제목 - 이모지 포함]</h2>
-<p>[독자의 흥미를 유발하는 한 줄 인트로]</p>
-<p>[기술 설명 및 핵심 내용을 흥미롭게 재작성 - 충분히 길게]</p>
-<p><a href="URL링크">🔗 자세히 보기</a></p>
-
-<h2>[섹션 2] [눈에 띄는 제목 - 이모지 포함]</h2>
-<p>[내용]</p>
-<p>[내용]</p>
-<p><a href="URL링크">🔗 자세히 보기</a></p>
-```
-
-응답은 꼭 위 HTML 형식으로 작성해주세요. 마크다운이 아닌 HTML 태그를 사용해야 합니다.
-"""
+⚠️ 중요: 모든 기사에서 숫자, 금액, 핵심단어를 <strong>태그로 강조! 마지막 기사까지 일관되게!"""
         
         # Azure OpenAI API 호출
         response = client.chat.completions.create(
@@ -462,7 +434,12 @@ def summarize_articles(client: AzureOpenAI, articles: List[Dict[str, Any]]) -> s
 - 마치 친구에게 흥미로운 소식을 알려주는 것처럼 작성
 - 기술적 내용도 일상 언어로 쉽게 설명
 
-독자가 "음... 이거 재밌네?!"라고 생각하며 끝까지 읽고 싶어지는 글이 되어야 합니다."""
+독자가 "음... 이거 재밌네?!"라고 생각하며 끝까지 읽고 싶어지는 글이 되어야 합니다.
+
+중요: 핵심 내용 강조 필수!
+- 숫자, 금액, 주요 사실은 <strong>태그로 감싸서 노란 배경으로 강조
+- 예: OpenAI가 <strong>225억 달러</strong> 투자를 받았다
+- 기술 용어나 중요한 개념도 <strong>강조</strong>하거나 <u>밑줄</u>로 표시"""
                 },
                 {
                     "role": "user",
@@ -538,44 +515,39 @@ def format_ai_html(html_text: str) -> str:
         
         # h1 스타일 추가 (더 눈에 띄게)
         html = re.sub(r'<h1>(.+?)</h1>', 
-                      r'<h1 style="color: #4CAF50; font-size: 28px; margin: 30px 0 25px; font-weight: bold; text-align: center; border-bottom: 3px solid #4CAF50; padding-bottom: 15px;">\1</h1>', 
+                      r'<h1 style="color: #4CAF50; font-size: 28px; margin: 30px 0 25px; font-weight: bold; text-align: center; border-bottom: 3px solid #4CAF50; padding-bottom: 15px; font-family: \'Apple SD Gothic Neo\', -apple-system, \'Segoe UI\', sans-serif;">\1</h1>', 
                       html, flags=re.DOTALL)
         
-        # h2 스타일 추가 (다양한 색상으로)
-        # 섹션별로 다른 색상 적용
-        section_num = 0
-        def replace_h2(match):
-            nonlocal section_num
-            content = match.group(1)
-            colors = [
-                ('#2196F3', '#E3F2FD'),  # 파란색
-                ('#FF9800', '#FFF3E0'),  # 주황색
-                ('#9C27B0', '#F3E5F5'),  # 보라색
-                ('#4CAF50', '#E8F5E9'),  # 초록색
-            ]
-            color, bg_color = colors[section_num % len(colors)]
-            section_num += 1
-            return f'<h2 style="color: {color}; font-size: 22px; margin: 30px 0 15px; padding: 12px 15px; background: linear-gradient(90deg, {bg_color} 0%, #FFFFFF 100%); border-left: 5px solid {color}; border-radius: 5px; font-weight: bold;">{content}</h2>'
+        # h2 스타일 추가 (밝은 배경용)
+        html = re.sub(r'<h2>(.+?)</h2>', 
+                      r'<h2 style="color: #2196F3; font-size: 22px; margin: 30px 0 15px; padding: 12px 15px; background: linear-gradient(90deg, #E3F2FD 0%, #FFFFFF 100%); border-left: 5px solid #2196F3; border-radius: 5px; font-weight: bold; font-family: \'Apple SD Gothic Neo\', -apple-system, \'Segoe UI\', sans-serif;">\1</h2>', 
+                      html, flags=re.DOTALL)
         
-        html = re.sub(r'<h2>(.+?)</h2>', replace_h2, html, flags=re.DOTALL)
-        
-        # p 태그에 스타일 추가 (줄 간격, 여백 개선)
+        # p 태그에 스타일 추가 (밝은 배경용)
         html = re.sub(r'<p>(.+?)</p>', 
-                      r'<p style="margin: 0 0 18px 0; line-height: 1.8; color: #333; font-size: 16px; text-align: justify; padding: 0 10px;">\1</p>', 
+                      r'<p style="margin: 0 0 18px 0; line-height: 1.8; color: #333; font-size: 16px; text-align: justify; padding: 0 10px; font-family: \'Apple SD Gothic Neo\', -apple-system, \'Segoe UI\', sans-serif;">\1</p>', 
                       html, flags=re.DOTALL)
         
-        # a 태그 스타일 추가 (더 눈에 띄는 버튼)
+        # 강조 텍스트 스타일 추가 (격리된 스타일로 수정)
+        html = re.sub(r'<strong[^>]*>(.+?)</strong>', 
+                      r'<span style="background-color: #fffacd; padding: 2px 4px; border-radius: 3px; font-weight: 600; color: #d2691e; font-family: \'Apple SD Gothic Neo\', -apple-system, \'Segoe UI\', sans-serif; display: inline;">\1</span>', 
+                      html, flags=re.DOTALL)
+        html = re.sub(r'<u>(.+?)</u>', 
+                      r'<span style="border-bottom: 2px solid #ff9800; font-weight: 500; font-family: \'Apple SD Gothic Neo\', -apple-system, \'Segoe UI\', sans-serif; display: inline; padding-bottom: 1px;">\1</span>', 
+                      html, flags=re.DOTALL)
+        
+        # a 태그 스타일 추가 (밝은 배경용)
         html = re.sub(r'<a href="([^"]+)">(.+?)</a>', 
-                      r'<a href="\1" style="color: #4CAF50; text-decoration: none; padding: 12px 20px; background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border-radius: 8px; display: inline-block; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.3s;">\2</a>', 
+                      r'<a href="\1" style="color: white; text-decoration: none; padding: 12px 20px; background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); border-radius: 8px; display: inline-block; font-weight: bold; box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3); transition: all 0.3s; font-family: \'Apple SD Gothic Neo\', -apple-system, \'Segoe UI\', sans-serif;">\2</a>', 
                       html, flags=re.DOTALL)
     else:
-        # 마크다운 형식인 경우 (하위 호환성)
+        # 마크다운 형식인 경우 (하위 호환성 - 밝은 배경)
         html = html_text
         html = html.replace('# 🎯 오늘 챙겨볼 AI 소식 (2-3선)', '<h1 style="color: #4CAF50; font-size: 28px; margin: 30px 0 25px; font-weight: bold; text-align: center; border-bottom: 3px solid #4CAF50; padding-bottom: 15px;">🎯 오늘 챙겨볼 AI 소식 (2-3선)</h1>')
         html = re.sub(r'^## (.+)$', r'<h2 style="color: #2196F3; font-size: 22px; margin: 30px 0 15px; padding: 12px 15px; background: linear-gradient(90deg, #E3F2FD 0%, #FFFFFF 100%); border-left: 5px solid #2196F3; border-radius: 5px; font-weight: bold;">\1</h2>', html, flags=re.MULTILINE)
-        html = re.sub(r'🔗 \[([^\]]+)\]\(([^\)]+)\)', r'<p style="margin: 10px 0;"><a href="\2" style="color: #4CAF50; text-decoration: none; padding: 12px 20px; background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border-radius: 8px; display: inline-block; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔗 \1</a></p>', html)
+        html = re.sub(r'🔗 \[([^\]]+)\]\(([^\)]+)\)', r'<p style="margin: 10px 0;"><a href="\2" style="color: white; text-decoration: none; padding: 12px 20px; background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); border-radius: 8px; display: inline-block; font-weight: bold; box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);">🔗 \1</a></p>', html)
         
-        # 단락 처리 (더 넓은 간격)
+        # 단락 처리 (더 넓은 간격 - 밝은 배경)
         paragraphs = html.split('\n\n')
         formatted_paragraphs = []
         for para in paragraphs:
@@ -601,99 +573,51 @@ def send_summary_email(summary: str):
         # AI가 반환한 내용을 HTML로 변환
         html_summary = format_ai_html(summary)
         
-        # 메일 본문 작성 (HTML 형식)
+        # 메일 본문 작성 (HTML 형식 - 테이블 구조로 전달 시 안정성 향상)
         html_body = f"""
         <!DOCTYPE html>
         <html>
             <head>
                 <meta charset="UTF-8">
-                <style>
-                    body {{ 
-                        font-family: 'Apple SD Gothic Neo', -apple-system, 'Segoe UI', sans-serif; 
-                        line-height: 1.8; 
-                        color: #333; 
-                        background-color: #f5f5f5;
-                        margin: 0;
-                        padding: 0;
-                    }}
-                    .container {{ 
-                        max-width: 850px; 
-                        margin: 0 auto; 
-                        background: white;
-                    }}
-                    .header {{
-                        background-color: #4CAF50;
-                        color: white;
-                        padding: 30px 20px;
-                        text-align: center;
-                        margin: 0;
-                        border-bottom: 3px solid #45a049;
-                    }}
-                    .header h1 {{
-                        margin: 0 0 10px 0;
-                        font-size: 26px;
-                        font-weight: bold;
-                        color: white;
-                    }}
-                    .header p {{
-                        margin: 0;
-                        font-size: 14px;
-                        color: white;
-                        opacity: 0.9;
-                    }}
-                    .content {{ 
-                        padding: 40px 30px; 
-                        background: white;
-                    }}
-                    h2 {{
-                        margin-top: 30px !important;
-                        margin-bottom: 15px !important;
-                        font-size: 22px;
-                    }}
-                    p {{
-                        margin: 12px 0;
-                        color: #444;
-                        font-size: 16px;
-                    }}
-                    .content {{
-                        font-size: 16px;
-                    }}
-                    a {{
-                        color: #4CAF50;
-                        text-decoration: none;
-                        transition: all 0.3s;
-                    }}
-                    a:hover {{
-                        text-decoration: underline;
-                    }}
-                    .footer {{ 
-                        margin-top: 40px; 
-                        padding: 25px 20px; 
-                        border-top: 2px solid #e0e0e0; 
-                        text-align: center; 
-                        color: #666; 
-                        font-size: 14px; 
-                        background-color: #f9f9f9;
-                    }}
-                    .footer p {{
-                        margin: 0;
-                        color: #666;
-                    }}
-                </style>
             </head>
-            <body>
-                <div style="max-width: 850px; margin: 0 auto; background: white;">
-                    <div style="background: linear-gradient(135deg, rgba(139, 69, 19, 0.35) 0%, rgba(205, 92, 92, 0.3) 12%, rgba(210, 105, 30, 0.35) 25%, rgba(218, 165, 32, 0.3) 37%, rgba(184, 134, 11, 0.35) 50%, rgba(205, 133, 63, 0.3) 62%, rgba(188, 143, 143, 0.35) 75%, rgba(222, 184, 135, 0.3) 87%, rgba(244, 164, 96, 0.35) 100%); color: white; padding: 35px 20px; text-align: center; margin: 0;">
-                        <h1 style="margin: 0 0 8px 0; font-size: 26px; font-weight: bold; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">📰 인재육성팀 AI 뉴스레터</h1>
-                        <p style="margin: 0; font-size: 14px; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">{datetime.now().strftime('%Y년 %m월 %d일')}</p>
-                    </div>
-                    <div style="padding: 40px 30px; background: linear-gradient(135deg, rgba(255, 248, 220, 0.5) 0%, rgba(255, 250, 240, 0.45) 50%, rgba(255, 245, 238, 0.5) 100%);">
-                        {html_summary}
-                        <div style="margin-top: 40px; padding: 25px 20px; border-top: 2px solid #e0e0e0; text-align: center; color: #666; font-size: 14px; background-color: #f9f9f9;">
-                            <p style="margin: 0; color: #666;">✨오늘도 좋은 하루 보내세요^^✨</p>
-                        </div>
-                    </div>
-                </div>
+            <body style="font-family: 'Apple SD Gothic Neo', -apple-system, 'Segoe UI', sans-serif; line-height: 1.8; color: #333; background-color: #f5f5f5; margin: 0; padding: 0;">
+                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f5f5f5;">
+                    <tr>
+                        <td align="center" style="padding: 20px 0;">
+                            <table width="850" cellpadding="0" cellspacing="0" border="0" style="max-width: 850px; background-color: #ffffff;">
+                                <!-- Header -->
+                                <tr>
+                                    <td bgcolor="#0a0e1f" align="center" style="padding: 40px 20px; background: linear-gradient(135deg, #0a0e1f 0%, #1a1a2e 100%);">
+                                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                            <tr>
+                                                <td align="center" style="padding-bottom: 10px;">
+                                                    <h1 style="margin: 0; font-size: 28px; font-weight: bold; color: #00ffff; text-shadow: 0 0 15px rgba(0, 255, 255, 0.8), 0 0 25px rgba(0, 255, 255, 0.5); font-family: 'Apple SD Gothic Neo', -apple-system, 'Segoe UI', sans-serif;">📰 인재육성팀 AI 뉴스레터</h1>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td align="center">
+                                                    <p style="margin: 0; font-size: 15px; color: #87ceeb; text-shadow: 0 0 10px rgba(135, 206, 235, 0.6); font-family: 'Apple SD Gothic Neo', -apple-system, 'Segoe UI', sans-serif;">{datetime.now().strftime('%Y년 %m월 %d일')}</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                <!-- Content -->
+                                <tr>
+                                    <td bgcolor="#ffffff" style="padding: 45px 30px; background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);">
+                                        {html_summary}
+                                    </td>
+                                </tr>
+                                <!-- Footer -->
+                                <tr>
+                                    <td align="center" bgcolor="#f8f9fa" style="padding: 30px 25px; border-top: 3px solid #e9ecef; text-align: center; color: #6c757d; font-size: 15px; background-color: #f8f9fa; border-radius: 8px;">
+                                        <p style="margin: 0; color: #495057; font-family: 'Apple SD Gothic Neo', -apple-system, 'Segoe UI', sans-serif;">✨오늘도 좋은 하루 보내세요^^✨</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
             </body>
         </html>
         """
