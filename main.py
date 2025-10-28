@@ -173,7 +173,17 @@ def get_email_body(msg: email.message.EmailMessage) -> str:
 
 def extract_articles_from_html(html: str) -> List[Dict[str, Any]]:
     """
-    HTML에서 TLDR 뉴스레터 기사 추출
+    HTML에서 TLDR 뉴스레터 기사 추출 (개선된 버전 2)
+    <table> 블록 단위로 기사를 파싱
+    
+    구조:
+    <table>
+      <a href="링크">
+        <strong>제목</strong>
+      </a>
+      <br><br>
+      <span style="font-family:...">요약</span>
+    </table>
     
     Args:
         html: HTML 본문
@@ -187,44 +197,60 @@ def extract_articles_from_html(html: str) -> List[Dict[str, Any]]:
     try:
         soup = BeautifulSoup(html, 'lxml')
         
-        # TLDR 뉴스레터 HTML 구조 분석 및 파싱
-        # 실제 구조는 TLDR 메일을 받아서 확인 필요
+        # 모든 <table> 블록 찾기
+        tables = soup.find_all('table', align='center')
         
-        # 일반적인 패턴: 링크가 있는 기사 블록 찾기
-        # 예시: <a href="..." class="article"> 형식
-        
-        # 방법 1: 링크 기반 추출
-        links = soup.find_all('a', href=True)
-        
-        for link in links:
-            # 링크 텍스트가 있고 URL이 포함된 경우
-            link_text = link.get_text(strip=True)
-            link_url = link.get('href')
+        for table in tables:
+            # <a> 태그 찾기
+            link_tag = table.find('a', href=True)
+            if not link_tag:
+                continue
             
-            # TLDR 링크 패턴 확인 (예: tldr.tech로 시작하거나 짧은 URL)
-            if link_url and len(link_text) > 10 and 'http' in link_url:
-                # 부모 요소에서 추가 컨텍스트 추출
-                parent = link.parent
-                summary_text = ""
+            link_url = link_tag.get('href')
+            if not link_url or 'http' not in link_url:
+                continue
+            
+            # tldr.tech 관련 링크는 제외
+            if 'tldr.tech' in link_url or 'techplatforms.com' in link_url:
+                continue
+            
+            # <strong> 태그에서 제목 추출
+            strong_tag = link_tag.find('strong')
+            if not strong_tag:
+                continue
+            
+            title = strong_tag.get_text(strip=True)
+            
+            # Sponsor 광고 제외
+            if '(Sponsor)' in title or title.startswith('Looking for a practical') or title.startswith('Get it free') or title.startswith('Try it free') or title.startswith('Together With'):
+                continue
+            
+            # 모든 <span> 태그에서 요약 찾기
+            spans = table.find_all('span')
+            summary = ""
+            
+            for span in spans:
+                style = span.get('style', '')
+                span_text = span.get_text(strip=True)
                 
-                if parent:
-                    # 링크 주변 텍스트가 요약일 가능성
-                    siblings = []
-                    for sibling in parent.next_siblings:
-                        if isinstance(sibling, str):
-                            siblings.append(sibling.strip())
-                        else:
-                            siblings.append(sibling.get_text(strip=True))
-                    
-                    summary_text = ' '.join(siblings[:3])[:200]  # 처음 3개 요소만
-                
-                # 중복 제거 로직
-                if not any(article['link'] == link_url for article in articles):
-                    articles.append({
-                        'title': link_text,
-                        'summary': summary_text if summary_text else link_text[:100],
-                        'link': link_url
-                    })
+                # font-family가 있는 span이 요약일 가능성 높음
+                if 'font-family' in style and len(span_text) > 30:
+                    # strong 태그 제목과 다른 경우만 요약으로
+                    if span_text != title:
+                        summary = span_text
+                        break
+            
+            # 요약이 없으면 제목 사용
+            if not summary:
+                summary = title[:200]
+            
+            # 중복 체크
+            if not any(article['link'] == link_url for article in articles):
+                articles.append({
+                    'title': title,
+                    'summary': summary[:300],
+                    'link': link_url
+                })
         
         logger.info(f"추출된 기사 수: {len(articles)}")
         
@@ -233,6 +259,8 @@ def extract_articles_from_html(html: str) -> List[Dict[str, Any]]:
     
     except Exception as e:
         logger.error(f"HTML 파싱 중 오류: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return []
 
 
@@ -373,34 +401,50 @@ def summarize_articles(client: AzureOpenAI, articles: List[Dict[str, Any]]) -> s
         
         # Azure OpenAI 프롬프트
         prompt = f"""다음은 TLDR 뉴스레터에서 추출한 기술 뉴스 기사들입니다 (이미 요약본입니다).
-이 중에서 가장 중요하고 흥미로운 2-3개 기사만 선별하여, 한국어로 독자의 관심을 유발하는 재미있는 글로 재작성해주세요.
+이 중에서 가장 중요하고 흥미로운 2-3개 기사만 선별하여, 독자가 정말 재미있게 읽을 수 있는 스토리텔링 방식으로 재작성해주세요.
 
 원본 기사들:
 {articles_text}
 
 요구사항:
 1. 총 20개 기사 중 가장 중요하고 흥미로운 **2-3개만** 선별
-2. 선택한 기사를 한국어로 **완전히 새로 작성** (단순 번역 금지)
-3. 독자의 호기심을 유발하는 흥미진진한 톤으로 작성
-   - 예: "🎉 큰 소식! OpenAI가 또 한 발 앞서갔어요!"
-   - 예: "🔥 진짜 혁명적인 기술이 나왔다네요!"
-   - 예: "💡 이거 완전 게임체인저인데요?"
-4. 각 기사마다 제목, 재작성된 핵심 내용, 링크 포함
-5. 기술 용어는 일반인도 이해할 수 있게 쉽게 설명
+2. **스토리텔링 방식**으로 작성 - 마치 친구에게 재미있는 소식을 전하는 것처럼!
+   - 시작: 일상적인 상황이나 질문으로 독자를 끌어들이기
+   - 본문: 구체적인 예시와 비유를 사용하여 설명
+   - 마무리: 실제 영향력과 의미를 강조
+3. **톤 & 스타일**:
+   - 편안하고 친근한 말투 사용
+   - "~데요", "~거예요", "~하네요" 같은 구어체 활용
+   - 감탄사와 이모지 적극 활용 (🎉 🔥 💡 🚀 💰 ⚡ 등)
+   - 매우 사적인 스타일: "~하시나요?", "~줄 아세요?", "~고 있답니다!"
+4. **내용 구성**:
+   - 각 기사마다 2-3개 문단으로 구성
+   - 1문단: 인트로 (독자 관심 유도)
+   - 2문단: 핵심 내용 (구체적 예시와 함께)
+   - 3문단: 영향력과 의미 (무엇이 변하는지)
+5. 기술 용어는 반드시 **일상 예시와 비유**로 설명
+   - 예: "AI 모델 = 사람 뇌를 컴퓨터에 넣은 것"
+   - 예: "GPU = 그림 그리는 고속 버스"
 6. 원본이 광고나 후원 게시물이면 제외
-7. 각 기사 내용은 **길게 작성** (최소 8-10줄, 200-300자 이상으로 충분히 상세하게 설명)
+7. 각 기사는 **최소 250자 이상**으로 충분히 상세하게 작성
 
-다음 형식으로 작성해주세요:
+중요: 응답은 반드시 다음 형식을 정확히 따라야 합니다. 
 
-# 🎯 오늘 챙겨볼 AI 소식 (2-3선)
+```html
+<h1>🎯 오늘 챙겨볼 AI 소식 (2-3선)</h1>
 
-## [섹션 1] [눈에 띄는 제목 - 이모지 포함]
-[독자의 흥미를 유발하는 한 줄 인트로]
-[기술 설명 및 핵심 내용을 흥미롭게 재작성]
-🔗 [링크]
+<h2>[섹션 1] [눈에 띄는 제목 - 이모지 포함]</h2>
+<p>[독자의 흥미를 유발하는 한 줄 인트로]</p>
+<p>[기술 설명 및 핵심 내용을 흥미롭게 재작성 - 충분히 길게]</p>
+<p><a href="URL링크">🔗 자세히 보기</a></p>
 
-## [섹션 2] [눈에 띄는 제목 - 이모지 포함]
-...
+<h2>[섹션 2] [눈에 띄는 제목 - 이모지 포함]</h2>
+<p>[내용]</p>
+<p>[내용]</p>
+<p><a href="URL링크">🔗 자세히 보기</a></p>
+```
+
+응답은 꼭 위 HTML 형식으로 작성해주세요. 마크다운이 아닌 HTML 태그를 사용해야 합니다.
 """
         
         # Azure OpenAI API 호출
@@ -409,19 +453,34 @@ def summarize_articles(client: AzureOpenAI, articles: List[Dict[str, Any]]) -> s
             messages=[
                 {
                     "role": "system",
-                    "content": "당신은 기술 뉴스를 한국어로 쉽고 재미있게 재작성하는 전문가입니다."
+                    "content": """당신은 기술 뉴스를 아주 재미있고 읽기 좋게 스토리텔링하는 전문가입니다.
+
+작성 스타일:
+- 편안하고 친근한 구어체 사용 ("~거예요", "~하시나요?", "~고 있답니다!")
+- 구체적인 예시와 비유를 많이 사용
+- 감탄사와 이모지 적극 활용
+- 마치 친구에게 흥미로운 소식을 알려주는 것처럼 작성
+- 기술적 내용도 일상 언어로 쉽게 설명
+
+독자가 "음... 이거 재밌네?!"라고 생각하며 끝까지 읽고 싶어지는 글이 되어야 합니다."""
                 },
                 {
                     "role": "user",
                     "content": prompt
                 }
             ],
-            temperature=0.7,
-            max_tokens=4000
+            temperature=0.9,  # 더 창의적이고 재미있게
+            max_tokens=4500
         )
         
         summary = response.choices[0].message.content
         logger.info("Azure OpenAI 요약 완료")
+        
+        # 코드블록 제거 (```html과 ```를 제거)
+        import re
+        summary = re.sub(r'```html\s*\n?', '', summary)
+        summary = re.sub(r'```\s*$', '', summary, flags=re.MULTILINE)
+        summary = summary.strip()
         
         return summary
     
@@ -463,38 +522,68 @@ def print_summary(summary: str):
     print("="*80)
 
 
-def markdown_to_html(markdown_text: str) -> str:
+def format_ai_html(html_text: str) -> str:
     """
-    마크다운 텍스트를 HTML로 변환
-    
-    Args:
-        markdown_text: 마크다운 형식 텍스트
-    
-    Returns:
-        str: HTML 형식 텍스트
+    AI가 반환한 HTML에 스타일을 추가하여 완전한 HTML로 변환
+    - 더 나은 가독성을 위한 다채로운 스타일링
+    - 줄바꿈과 단락 구분 개선
+    - 색상과 크기 다양화
     """
-    html = markdown_text
-    
-    # # 제목 -> <h1>
-    html = html.replace('# 🎯 오늘 챙겨볼 AI 소식 (2-3선)', '<h1 style="color: #4CAF50; font-size: 24px; margin: 20px 0;">🎯 오늘 챙겨볼 AI 소식 (2-3선)</h1>')
-    
-    # ## 섹션 제목 -> <h2>
     import re
-    html = re.sub(r'^## (.+)$', r'<h2 style="color: #2196F3; font-size: 20px; margin: 25px 0 10px; padding: 10px; background: linear-gradient(90deg, #E3F2FD 0%, #FFFFFF 100%); border-left: 4px solid #2196F3;">\1</h2>', html, flags=re.MULTILINE)
     
-    # 🔗 링크 -> <a> 태그
-    html = re.sub(r'🔗 \[([^\]]+)\]\(([^\)]+)\)', r'<p style="margin: 10px 0;"><a href="\2" style="color: #4CAF50; text-decoration: none; padding: 8px 15px; background: #E8F5E9; border-radius: 5px; display: inline-block;">🔗 \1</a></p>', html)
-    
-    # 단락 처리 (빈 줄 기준)
-    paragraphs = html.split('\n\n')
-    formatted_paragraphs = []
-    for para in paragraphs:
-        para = para.strip()
-        if para and not para.startswith('<h') and not para.startswith('<p'):
-            para = f'<p style="margin: 15px 0; line-height: 1.9; color: #333; font-size: 16px;">{para}</p>'
-        formatted_paragraphs.append(para)
-    
-    html = '\n'.join(formatted_paragraphs)
+    # AI가 HTML 태그를 사용했는지 확인
+    if '<h1>' in html_text or '<h2>' in html_text:
+        # 이미 HTML 형식인 경우 - 개선된 스타일 추가
+        html = html_text
+        
+        # h1 스타일 추가 (더 눈에 띄게)
+        html = re.sub(r'<h1>(.+?)</h1>', 
+                      r'<h1 style="color: #4CAF50; font-size: 28px; margin: 30px 0 25px; font-weight: bold; text-align: center; border-bottom: 3px solid #4CAF50; padding-bottom: 15px;">\1</h1>', 
+                      html, flags=re.DOTALL)
+        
+        # h2 스타일 추가 (다양한 색상으로)
+        # 섹션별로 다른 색상 적용
+        section_num = 0
+        def replace_h2(match):
+            nonlocal section_num
+            content = match.group(1)
+            colors = [
+                ('#2196F3', '#E3F2FD'),  # 파란색
+                ('#FF9800', '#FFF3E0'),  # 주황색
+                ('#9C27B0', '#F3E5F5'),  # 보라색
+                ('#4CAF50', '#E8F5E9'),  # 초록색
+            ]
+            color, bg_color = colors[section_num % len(colors)]
+            section_num += 1
+            return f'<h2 style="color: {color}; font-size: 22px; margin: 30px 0 15px; padding: 12px 15px; background: linear-gradient(90deg, {bg_color} 0%, #FFFFFF 100%); border-left: 5px solid {color}; border-radius: 5px; font-weight: bold;">{content}</h2>'
+        
+        html = re.sub(r'<h2>(.+?)</h2>', replace_h2, html, flags=re.DOTALL)
+        
+        # p 태그에 스타일 추가 (줄 간격, 여백 개선)
+        html = re.sub(r'<p>(.+?)</p>', 
+                      r'<p style="margin: 0 0 18px 0; line-height: 1.8; color: #333; font-size: 16px; text-align: justify; padding: 0 10px;">\1</p>', 
+                      html, flags=re.DOTALL)
+        
+        # a 태그 스타일 추가 (더 눈에 띄는 버튼)
+        html = re.sub(r'<a href="([^"]+)">(.+?)</a>', 
+                      r'<a href="\1" style="color: #4CAF50; text-decoration: none; padding: 12px 20px; background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border-radius: 8px; display: inline-block; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.3s;">\2</a>', 
+                      html, flags=re.DOTALL)
+    else:
+        # 마크다운 형식인 경우 (하위 호환성)
+        html = html_text
+        html = html.replace('# 🎯 오늘 챙겨볼 AI 소식 (2-3선)', '<h1 style="color: #4CAF50; font-size: 28px; margin: 30px 0 25px; font-weight: bold; text-align: center; border-bottom: 3px solid #4CAF50; padding-bottom: 15px;">🎯 오늘 챙겨볼 AI 소식 (2-3선)</h1>')
+        html = re.sub(r'^## (.+)$', r'<h2 style="color: #2196F3; font-size: 22px; margin: 30px 0 15px; padding: 12px 15px; background: linear-gradient(90deg, #E3F2FD 0%, #FFFFFF 100%); border-left: 5px solid #2196F3; border-radius: 5px; font-weight: bold;">\1</h2>', html, flags=re.MULTILINE)
+        html = re.sub(r'🔗 \[([^\]]+)\]\(([^\)]+)\)', r'<p style="margin: 10px 0;"><a href="\2" style="color: #4CAF50; text-decoration: none; padding: 12px 20px; background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border-radius: 8px; display: inline-block; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔗 \1</a></p>', html)
+        
+        # 단락 처리 (더 넓은 간격)
+        paragraphs = html.split('\n\n')
+        formatted_paragraphs = []
+        for para in paragraphs:
+            para = para.strip()
+            if para and not para.startswith('<h') and not para.startswith('<p') and para:
+                para = f'<p style="margin: 0 0 20px 0; line-height: 1.8; color: #333; font-size: 16px; text-align: justify;">{para}</p>'
+            formatted_paragraphs.append(para)
+        html = '\n'.join(formatted_paragraphs)
     
     return html
 
@@ -509,8 +598,8 @@ def send_summary_email(summary: str):
     try:
         logger.info("메일 발송 시작...")
         
-        # 마크다운을 HTML로 변환
-        html_summary = markdown_to_html(summary)
+        # AI가 반환한 내용을 HTML로 변환
+        html_summary = format_ai_html(summary)
         
         # 메일 본문 작성 (HTML 형식)
         html_body = f"""
@@ -531,23 +620,30 @@ def send_summary_email(summary: str):
                         max-width: 700px; 
                         margin: 20px auto; 
                         background: white;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+                        border-radius: 8px;
+                        overflow: hidden;
                     }}
                     .header {{ 
                         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                         color: white; 
-                        padding: 40px 30px; 
-                        text-align: center; 
+                        padding: 50px 30px; 
+                        text-align: center;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
                     }}
                     .header h1 {{
                         margin: 0;
-                        font-size: 28px;
+                        font-size: 32px;
                         font-weight: bold;
+                        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                        letter-spacing: 0.5px;
                     }}
                     .header p {{
-                        margin: 10px 0 0;
+                        margin: 15px 0 0;
                         font-size: 16px;
-                        opacity: 0.9;
+                        opacity: 0.95;
+                        font-weight: 300;
+                        letter-spacing: 0.3px;
                     }}
                     .content {{ 
                         padding: 40px 30px; 
@@ -575,17 +671,19 @@ def send_summary_email(summary: str):
                         text-decoration: underline;
                     }}
                     .footer {{ 
-                        margin-top: 40px; 
-                        padding-top: 30px; 
-                        border-top: 2px solid #e0e0e0; 
+                        margin-top: 50px; 
+                        padding: 30px 25px; 
+                        border-top: 3px solid #e0e0e0; 
                         text-align: center; 
-                        color: #888; 
-                        font-size: 13px; 
-                        background: #fafafa;
-                        padding: 25px;
+                        color: #666; 
+                        font-size: 15px; 
+                        background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+                        border-radius: 0 0 8px 8px;
                     }}
                     .footer p {{
                         margin: 5px 0;
+                        font-style: italic;
+                        letter-spacing: 0.5px;
                     }}
                 </style>
             </head>
@@ -593,12 +691,12 @@ def send_summary_email(summary: str):
                 <div class="container">
                     <div class="header">
                         <h1>📰 인재육성팀 AI 뉴스레터</h1>
-                        <p>{datetime.now().strftime('%Y년 %m월 %d일 (%A)')}</p>
+                        <p>{datetime.now().strftime('%Y년 %m월 %d일')}</p>
                     </div>
                     <div class="content">
                         {html_summary}
                         <div class="footer">
-                            <p>오늘도 행복한 하루 보내세요 *^_^*</p>
+                            <p>✨ 오늘도 행복한 하루 보내세요 ✨</p>
                         </div>
                     </div>
                 </div>
@@ -608,7 +706,7 @@ def send_summary_email(summary: str):
         
         # 메일 발송 (여러 수신자)
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = f'🤖 TLDR AI 뉴스레터 요약 - {datetime.now().strftime("%Y년 %m월 %d일")}'
+        msg['Subject'] = f'🤖 [인재육성팀] AI 뉴스레터 - {datetime.now().strftime("%Y년 %m월 %d일")}'
         msg['From'] = config.GMAIL_EMAIL
         msg['To'] = ', '.join(config.RECIPIENT_EMAILS)
         
