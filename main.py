@@ -617,33 +617,29 @@ def send_summary_email(summary: str):
                         padding: 0;
                     }}
                     .container {{ 
-                        max-width: 700px; 
-                        margin: 20px auto; 
+                        max-width: 850px; 
+                        margin: 0 auto; 
                         background: white;
-                        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-                        border-radius: 8px;
-                        overflow: hidden;
                     }}
-                    .header {{ 
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        color: white; 
-                        padding: 50px 30px; 
+                    .header {{
+                        background-color: #4CAF50;
+                        color: white;
+                        padding: 30px 20px;
                         text-align: center;
-                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                        margin: 0;
+                        border-bottom: 3px solid #45a049;
                     }}
                     .header h1 {{
-                        margin: 0;
-                        font-size: 32px;
+                        margin: 0 0 10px 0;
+                        font-size: 26px;
                         font-weight: bold;
-                        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                        letter-spacing: 0.5px;
+                        color: white;
                     }}
                     .header p {{
-                        margin: 15px 0 0;
-                        font-size: 16px;
-                        opacity: 0.95;
-                        font-weight: 300;
-                        letter-spacing: 0.3px;
+                        margin: 0;
+                        font-size: 14px;
+                        color: white;
+                        opacity: 0.9;
                     }}
                     .content {{ 
                         padding: 40px 30px; 
@@ -671,32 +667,30 @@ def send_summary_email(summary: str):
                         text-decoration: underline;
                     }}
                     .footer {{ 
-                        margin-top: 50px; 
-                        padding: 30px 25px; 
-                        border-top: 3px solid #e0e0e0; 
+                        margin-top: 40px; 
+                        padding: 25px 20px; 
+                        border-top: 2px solid #e0e0e0; 
                         text-align: center; 
                         color: #666; 
-                        font-size: 15px; 
-                        background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
-                        border-radius: 0 0 8px 8px;
+                        font-size: 14px; 
+                        background-color: #f9f9f9;
                     }}
                     .footer p {{
-                        margin: 5px 0;
-                        font-style: italic;
-                        letter-spacing: 0.5px;
+                        margin: 0;
+                        color: #666;
                     }}
                 </style>
             </head>
             <body>
-                <div class="container">
-                    <div class="header">
-                        <h1>📰 인재육성팀 AI 뉴스레터</h1>
-                        <p>{datetime.now().strftime('%Y년 %m월 %d일')}</p>
+                <div style="max-width: 850px; margin: 0 auto; background: white;">
+                    <div style="background: linear-gradient(135deg, rgba(139, 69, 19, 0.35) 0%, rgba(205, 92, 92, 0.3) 12%, rgba(210, 105, 30, 0.35) 25%, rgba(218, 165, 32, 0.3) 37%, rgba(184, 134, 11, 0.35) 50%, rgba(205, 133, 63, 0.3) 62%, rgba(188, 143, 143, 0.35) 75%, rgba(222, 184, 135, 0.3) 87%, rgba(244, 164, 96, 0.35) 100%); color: white; padding: 35px 20px; text-align: center; margin: 0;">
+                        <h1 style="margin: 0 0 8px 0; font-size: 26px; font-weight: bold; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">📰 인재육성팀 AI 뉴스레터</h1>
+                        <p style="margin: 0; font-size: 14px; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">{datetime.now().strftime('%Y년 %m월 %d일')}</p>
                     </div>
-                    <div class="content">
+                    <div style="padding: 40px 30px; background: linear-gradient(135deg, rgba(255, 248, 220, 0.5) 0%, rgba(255, 250, 240, 0.45) 50%, rgba(255, 245, 238, 0.5) 100%);">
                         {html_summary}
-                        <div class="footer">
-                            <p>✨ 오늘도 행복한 하루 보내세요 ✨</p>
+                        <div style="margin-top: 40px; padding: 25px 20px; border-top: 2px solid #e0e0e0; text-align: center; color: #666; font-size: 14px; background-color: #f9f9f9;">
+                            <p style="margin: 0; color: #666;">✨오늘도 좋은 하루 보내세요^^✨</p>
                         </div>
                     </div>
                 </div>
@@ -706,7 +700,7 @@ def send_summary_email(summary: str):
         
         # 메일 발송 (여러 수신자)
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = f'🤖 [인재육성팀] AI 뉴스레터 - {datetime.now().strftime("%Y년 %m월 %d일")}'
+        msg['Subject'] = f'[인재육성팀] AI 뉴스레터 🤖 - {datetime.now().strftime("%Y년 %m월 %d일")}'
         msg['From'] = config.GMAIL_EMAIL
         msg['To'] = ', '.join(config.RECIPIENT_EMAILS)
         
