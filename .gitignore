@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 로그 파일
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 환경 설정 파일 (민감한 정보 포함)
+config.py
+
+# 기타
+.pytest_cache/
+.coverage
+htmlcov/
