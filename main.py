@@ -538,7 +538,7 @@ def format_ai_html(html_text: str) -> str:
         
         # a 태그 스타일 추가 (밝은 배경용)
         html = re.sub(r'<a href="([^"]+)">(.+?)</a>', 
-                      r'<a href="\1" style="color: white; text-decoration: none; padding: 12px 20px; background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); border-radius: 8px; display: inline-block; font-weight: bold; box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3); transition: all 0.3s; font-family: \'Apple SD Gothic Neo\', -apple-system, \'Segoe UI\', sans-serif;">\2</a>', 
+                      r'<a href="\1" style="color: white; text-decoration: none; padding: 8px 14px; background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); border-radius: 6px; display: inline-block; font-weight: 500; box-shadow: 0 1px 4px rgba(76, 175, 80, 0.25); font-size: 14px; font-family: \'Apple SD Gothic Neo\', -apple-system, \'Segoe UI\', sans-serif;">\2</a>', 
                       html, flags=re.DOTALL)
     else:
         # 마크다운 형식인 경우 (하위 호환성 - 밝은 배경)
@@ -624,7 +624,9 @@ def send_summary_email(summary: str):
         
         # 메일 발송 (여러 수신자)
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = f'[인재육성팀] AI 뉴스레터 🤖 - {datetime.now().strftime("%Y년 %m월 %d일")}'
+        from email.header import Header
+        subject = f'[인재육성팀] AI 뉴스레터 - {datetime.now().strftime("%Y년 %m월 %d일")}'
+        msg['Subject'] = Header(subject, 'utf-8').encode()
         msg['From'] = config.GMAIL_EMAIL
         msg['To'] = ', '.join(config.RECIPIENT_EMAILS)
         

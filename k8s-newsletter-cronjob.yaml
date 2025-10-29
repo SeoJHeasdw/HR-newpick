@@ -1,0 +1,70 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: newsletter-cronjob
+  namespace: newsletter
+spec:
+  # 매일 오전 8시 (KST) 실행 - UTC 기준으로는 23시 (전날)
+  schedule: "0 23 * * *"
+  timeZone: "Asia/Seoul"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: newsletter
+            image: ossknowledgeregistry.azurecr.io/newsletter:latest
+            imagePullPolicy: Always
+            env:
+            # 환경변수로 설정값 주입 (Secret에서 가져오기)
+            - name: GMAIL_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: newsletter-secrets
+                  key: gmail-email
+            - name: GMAIL_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: newsletter-secrets
+                  key: gmail-app-password
+            - name: AZURE_OPENAI_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: newsletter-secrets
+                  key: azure-openai-endpoint
+            - name: AZURE_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: newsletter-secrets
+                  key: azure-openai-api-key
+            - name: AZURE_OPENAI_DEPLOYMENT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: newsletter-secrets
+                  key: azure-openai-deployment-name
+            - name: AZURE_OPENAI_API_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: newsletter-secrets
+                  key: azure-openai-api-version
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+            volumeMounts:
+            - name: config-volume
+              mountPath: /app/config.py
+              subPath: config.py
+          volumes:
+          - name: config-volume
+            configMap:
+              name: newsletter-config
+          imagePullSecrets:
+          - name: acr-secret
